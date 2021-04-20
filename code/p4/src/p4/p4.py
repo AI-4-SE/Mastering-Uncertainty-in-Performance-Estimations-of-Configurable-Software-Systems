@@ -26,8 +26,6 @@ from sklearn.preprocessing import PolynomialFeatures
 from scipy.stats import cauchy, norm
 
 from sklearn.preprocessing import MinMaxScaler
-from scipy.stats import alpha as alpha_dist
-from scipy.stats import gamma as gamma_dist
 
 from sklearn.metrics import mean_squared_error
 from sklearn.metrics.regression import r2_score
@@ -78,7 +76,7 @@ def main():
 
     parser.add_argument("--sys-dir",
                         help="specifies the parent folder for all config sys",
-                        type=str, required=True,
+                        type=str, required=False, default="/application/Distance-Based_Data/SupplementaryWebsite/",
                         )
     parser.add_argument("--sys-name",
                         help="name of the conf sys",
@@ -121,8 +119,8 @@ def main():
                         type=int, default=5000,
                         )
     parser.add_argument("--folder",
-                        help="parent folder for results",
-                        type=str, default="./results",
+                        help="parent folder for results", required=False,
+                        type=str, default="/results/last-inference/",
                         )
     parser.add_argument("--active-sampler",
                         help="git dir for activesampler",
@@ -188,7 +186,6 @@ def main():
 
     cfg_sys = DistBasedRepo(sys_dir, sys_name, attribute=attribute)
 
-
     pos_map = dict(cfg_sys.position_map)
     ft_names_ordered = np.array(list(pos_map.keys()))[np.argsort(list(pos_map.values()))]
     configs = pd.DataFrame(list(cfg_sys.all_configs.keys()), columns=ft_names_ordered)
@@ -242,7 +239,6 @@ def main():
     saver.store_pickle(tracer, "tracer")
 
 
-
 def set_zero_to_min(arr):
     np_arr = np.array(arr)
     mask = np_arr != 0.0
@@ -265,7 +261,7 @@ class Tracer(BaseEstimator, RegressorMixin):
     def __init__(self, saver, conf_sys, x_eval=None, y_eval=None, inters_only_between_influentials=True,
                  no_plots=False, snapshot_err_scores=False, prior_broaden_factor=1, absolute_obs_noise=True,
                  relative_obs_noise=False, t_wise=None):
-                 
+
         self.t_wise = t_wise
         self.prior_spectrum_cost = None
         self.prior_broaden_factor = prior_broaden_factor
@@ -323,8 +319,8 @@ class Tracer(BaseEstimator, RegressorMixin):
         self.y_shared = shared(np.array(self.y))
         lin_reg_features = []
         root_beta = 10 ** 1
-        coef_sd = None  
-        noise_sd = None 
+        coef_sd = None
+        noise_sd = None
 
         seed_lin = np.random.randint(0, 10 ** 5)
         seed_inter = np.random.randint(0, 10 ** 5)
@@ -514,7 +510,7 @@ class Tracer(BaseEstimator, RegressorMixin):
         else:
             print("Skipping Error Scores")
             inter_errors = {}
-        trace_errs = {}  
+        trace_errs = {}
         snapshot = get_snapshot_dict(reg_dict_final, err_dict, inter_errors, reg_fts, model,
                                      influential_ft_list + influential_inter_list, trace, trace_errs)
         return snapshot
@@ -527,8 +523,8 @@ class Tracer(BaseEstimator, RegressorMixin):
         observed_y = self.y_shared
         print_flush("Generating interactions.")
         start = time.time()
-        
-        inter_strs = [] 
+
+        inter_strs = []
 
         if inter_pairs is not None and len(inter_pairs) > 0:
             for i, (a, b) in enumerate(inter_pairs):
@@ -581,10 +577,10 @@ class Tracer(BaseEstimator, RegressorMixin):
         reg_dict_final, err_dict = self.get_regression_spectrum(rv_names)
         if not self.no_plots:
             self.save_spectrum_fig(reg_dict_final, err_dict, rv_names)
-            
+
         all_raw_errs = [errs['raw'] for errs in list(err_dict.values())]
         all_abs_errs = np.array([abs(err['y_pred'] - err['y_true']) for err in all_raw_errs])
-        
+
         noise_sd_over_all_regs = sd_scale * 2 * float(all_abs_errs.mean())
         reg_list = list(reg_dict_final.values())
         alphas = []
@@ -868,7 +864,7 @@ class Tracer(BaseEstimator, RegressorMixin):
         axs = fig.axes
         colors = sns.color_palette("colorblind", len(reference_vals))
         num_vars = len(list(reference_vals.values())[0])
-        
+
         for n, (label, reference) in enumerate(reference_vals.items()):
             style = self.get_line_style(n, colors=colors)
             for i, ax in zip(range(num_vars), axs):
@@ -941,7 +937,6 @@ class Tracer(BaseEstimator, RegressorMixin):
             print("Successfully stored Prior Model pickle")
             storing_cost = time.time() - storing_start
 
-
             if method == "advi":
                 print_flush("Start ADVI.")
                 approx = pm.fit(method='asvgd', n=advi_its, callbacks=[CheckParametersConvergence(diff='relative')],
@@ -965,7 +960,7 @@ class Tracer(BaseEstimator, RegressorMixin):
         rv_names = []
         inter_strs = []
         columns = []
-        for var, mu in vars_and_biases.items():
+        for var, _ in vars_and_biases.items():
             if len(var) == 1:
                 var_name = var[0]
                 idx_ft = self.pos_map[var_name]
@@ -1008,7 +1003,7 @@ class Tracer(BaseEstimator, RegressorMixin):
         df_melted_coefs = pd.melt(df_coefs, id_vars=['i'], value_vars=coef_cols,
                                   var_name='feature', value_name='value')
         g = sns.FacetGrid(df_melted_coefs, col="feature", sharex=False, sharey=False, col_wrap=4)
-        
+
         g = g.map(sns.distplot, "value")
         coef_id = "{}-coefs".format(spectrum_id)
         self.saver.store_figure(coef_id)
@@ -1025,6 +1020,7 @@ class LassoTracer(Tracer):
         self.pos_map = pos_map
         if self.t_wise:
             self.interactions_possible = self.t_wise > 1
+            print("Interactions possible because t =", self.t_wise)
         else:
             self.interactions_possible = len(self.X[0]) < len(self.X)
         noise_str = 'noise'
@@ -1063,7 +1059,7 @@ class LassoTracer(Tracer):
         self.total_experiment_time = fit_end - fit_start
 
     def get_influentials_from_lasso(self, degree=2):
-        
+
         train_x_2d = np.atleast_2d(self.X)
         train_y = self.y
         lars = LassoCV(cv=3, positive=False, )  # .fit(train_x_2d, train_y)
