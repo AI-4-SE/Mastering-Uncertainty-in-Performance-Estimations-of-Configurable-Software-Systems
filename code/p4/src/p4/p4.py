@@ -1058,6 +1058,23 @@ class LassoTracer(Tracer):
         fit_end = time.time()
         self.total_experiment_time = fit_end - fit_start
 
+
+
+    def predict_raw_keep_trace_samples(self, x, model=None, trace=None):
+        if not model:
+            model = self.final_model
+            trace = self.final_trace
+        # self.x_shared.set_value(np.array(x))
+        transformed_x = self.get_pm_train_data(np.array(x))[1]
+        self.train_data.set_value(transformed_x)
+        with model:
+            # pm.set_data({'x_shared': x})
+            # ppc = pm.sample_posterior_predictive(trace )
+            ppc = pm.sample_posterior_predictive(trace )
+        # ppc = pm.sample_posterior_predictive(trace[1000:], model=self.final_model, samples=2000)
+        prediction_samples = list(ppc.values())[0]
+        return prediction_samples
+
     def get_influentials_from_lasso(self, degree=2):
 
         train_x_2d = np.atleast_2d(self.X)
