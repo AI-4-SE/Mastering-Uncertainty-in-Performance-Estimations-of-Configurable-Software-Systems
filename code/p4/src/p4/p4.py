@@ -8,6 +8,8 @@ from math import sqrt
 import os
 import platform
 import math
+from string import ascii_lowercase
+
 import arviz as az
 import matplotlib.pyplot as plt
 import numpy as np
@@ -233,7 +235,6 @@ def main():
     print("Storing Tracer Object")
     del tracer.X
     del tracer.y
-    del tracer.conf_sys
 
     # this stores the trained model
     saver.store_pickle(tracer, "tracer")
@@ -258,7 +259,7 @@ def update_fig_ax_titles(fig, ft_names_and_root):
 
 
 class Tracer(BaseEstimator, RegressorMixin):
-    def __init__(self, saver, conf_sys, x_eval=None, y_eval=None, inters_only_between_influentials=True,
+    def __init__(self, saver, conf_sys=None, x_eval=None, y_eval=None, inters_only_between_influentials=True,
                  no_plots=False, snapshot_err_scores=False, prior_broaden_factor=1, absolute_obs_noise=True,
                  relative_obs_noise=False, t_wise=None):
 
@@ -288,9 +289,6 @@ class Tracer(BaseEstimator, RegressorMixin):
         self.y_shared = None
         self.styles = ('-', '--', '-.', ':')
         self.history = {}
-        self.conf_sys = conf_sys
-        self.attribute = conf_sys.attribute
-        self.sys_name = conf_sys.sys_name
         self.models = {}
         self.fitting_times = {}
         self.total_experiment_time = None
@@ -1011,25 +1009,42 @@ class Tracer(BaseEstimator, RegressorMixin):
 
 
 class LassoTracer(Tracer):
-    def fit(self, X, y, feature_names, pos_map, attribute='unknown-attrib', method="advi", mcmc_tune=2000,
-            mcmc_cores=5, tree_depth=200, mcmc_samples=15000, p_mass=0.8, advi_its=100000, advi_trace_draws=5000):
+    def __init__(self, *args, feature_names=None, pos_map=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if feature_names:
+            self.feature_names = feature_names
+        if pos_map:
+            self.pos_map = pos_map
+
+    def fit(self, X, y, feature_names=None, pos_map=None, attribute='unknown-attrib', method="advi", mcmc_tune=2000,
+            mcmc_cores=5, tree_depth=200, mcmc_samples=15000, p_mass=0.8, advi_its=100000, advi_trace_draws=5000,
+            model_interactions=True):
         fit_start = time.time()
         self.X = X
         self.y = y
-        self.feature_names = feature_names
-        self.pos_map = pos_map
-        if self.t_wise:
-            self.interactions_possible = self.t_wise > 1
-            print("Interactions possible because t =", self.t_wise)
+        if feature_names:
+            self.feature_names = feature_names
+        if pos_map:
+            self.pos_map = pos_map
         else:
-            self.interactions_possible = len(self.X[0]) < len(self.X)
-        noise_str = 'noise'
+            self.pos_map = {opt: idx for idx, opt in enumerate(feature_names)}
+
+        if model_interactions:
+            if self.t_wise:
+                self.interactions_possible = self.t_wise > 1
+                print("Interactions possible because t =", self.t_wise)
+            else:
+                self.interactions_possible = len(self.X[0]) < len(self.X)
+            noise_str = 'noise'
+        else:
+            self.interactions_possible = False
 
         self.x_shared = np.array(self.X)
 
         seed_lin = np.random.randint(0, 10 ** 5)
 
         start_ft_selection = time.time()
+        print("Starting feature and itneraction selection.")
         self.final_var_names, lars_pipe, pruned_x = self.get_influentials_from_lasso()
         self.cost_ft_selection = time.time() - start_ft_selection
         print("Feature selection with lasso took {}s".format(self.cost_ft_selection))
@@ -1055,28 +1070,30 @@ class LassoTracer(Tracer):
         print_flush("Finished snapshot")
         self.final_model = lasso_model
         self.final_trace = lasso_trace
+        print("linked trace to Tracer object")
         fit_end = time.time()
         self.total_experiment_time = fit_end - fit_start
 
-
-
-    def predict_raw_keep_trace_samples(self, x, model=None, trace=None):
+    def predict_raw_keep_trace_samples(self, x, model=None, trace=None, n_post_samples=None):
         if not model:
             model = self.final_model
             trace = self.final_trace
         # self.x_shared.set_value(np.array(x))
         transformed_x = self.get_pm_train_data(np.array(x))[1]
         self.train_data.set_value(transformed_x)
+        self.x_shared = transformed_x
         with model:
             # pm.set_data({'x_shared': x})
             # ppc = pm.sample_posterior_predictive(trace )
-            ppc = pm.sample_posterior_predictive(trace )
+            if n_post_samples:
+                ppc = pm.sample_posterior_predictive(trace, samples=n_post_samples)
+            else:
+                ppc = pm.sample_posterior_predictive(trace)
         # ppc = pm.sample_posterior_predictive(trace[1000:], model=self.final_model, samples=2000)
         prediction_samples = list(ppc.values())[0]
         return prediction_samples
 
     def get_influentials_from_lasso(self, degree=2):
-
         train_x_2d = np.atleast_2d(self.X)
         train_y = self.y
         lars = LassoCV(cv=3, positive=False, )  # .fit(train_x_2d, train_y)
@@ -1089,7 +1106,10 @@ class LassoTracer(Tracer):
 
         if self.interactions_possible:
             transformed_x = poly_mapping.transform(train_x_2d)
-            ft_inters = poly_mapping.get_feature_names(input_features=self.feature_names)
+            if self.feature_names is not None:
+                ft_inters = poly_mapping.get_feature_names(input_features=self.feature_names)
+            else:
+                ft_inters = poly_mapping.get_feature_names()
         else:
             transformed_x = train_x_2d
             ft_inters = self.feature_names
@@ -1349,3 +1369,145 @@ def weighted_avg_and_std(values, weights, gamma=1):
 
 if __name__ == "__main__":
     main()
+
+
+def iter_all_strings():
+    for size in itertools.count(1):
+        for s in itertools.product(ascii_lowercase, repeat=size):
+            yield "".join(s)
+
+
+class P4Regressor(BaseEstimator, RegressorMixin):
+    def __init__(self, out_dir: str):
+        """
+        Constructor for a P4Regressor.
+
+        Parameters
+        ----------
+        out_dir :  path specifying where to store trained P4 model
+        """
+        saver = CompressedSaverHelper(out_dir, dpi=150, fig_pre='')
+        time_str = get_time_str()
+        session_dir_name = "-".join([time_str])
+        saver.set_session_dir(session_dir_name)
+        self.lasso_tracer = LassoTracer(saver, inters_only_between_influentials=True, no_plots=True,
+                                        relative_obs_noise=True, absolute_obs_noise=False)
+        self.coef_ = None
+        self.coef_samples_ = None
+        self.pos_map = None
+
+    def fit(self, X, y, feature_names: list = None, pos_map: dict = None, mcmc_cores: int = 3, mcmc_samples: int = 1000,
+            mcmc_tune: int = 500,
+            advi_its: int = 1000, method="mcmc"):
+        """
+
+        Parameters
+        ----------
+
+        X : training data
+        y : training labels
+        feature_names : list of names for the feaures, which are represented as columns in X - give either feature_names or pos_map
+        pos_map : map with indexes as keys and feature names as values, e.g. {0:"optA", 1:"optB"}. Will be generated is used internally to label generated interactions - give either feature_names or pos_map
+        mcmc_cores : Number of traces to compute in parallel during MCMC
+        mcmc_samples : Number of effective samples to return for each random varible, i.e., for each feature influence
+        mcmc_tune : Number of tuning samples that are discarded before conducting mcmc_samples samples
+        advi_its : Number of variational inference steps that approximate MCMC before MCMC starts
+        method : "mcmc" if combining variational inference with MCMC (recommended)
+        """
+        if pos_map:
+            feature_names = list(pos_map)
+        elif feature_names:
+            pos_map = {opt: idx for idx, opt in enumerate(feature_names)}
+        else:
+            pos_map = {opt: idx for idx, opt in zip(range(X.shape[1]), iter_all_strings())}
+
+        self.pos_map = pos_map
+        self.lasso_tracer.fit(X, y, pos_map=pos_map, feature_names=feature_names, mcmc_cores=mcmc_cores,
+                              mcmc_samples=mcmc_samples, mcmc_tune=mcmc_tune,
+                              advi_its=advi_its, method=method)
+        self.update_coefs()
+
+    def update_coefs(self):
+        """
+        Uses the current inferred trace to compute self.coef_ and self.coef_samples_
+        """
+        tracer = self.lasso_tracer
+        trace = tracer.final_trace
+        root_samples = trace["root"]
+        influence_samples = trace["influence"]
+        influence_dict = {varname: influence_samples[:, i] for i, varname in
+                          enumerate(self.lasso_tracer.final_var_names)}
+        relative_error_samples = trace["relative_error"]
+        self.coef_samples_ = {
+            "root": root_samples,
+            "influences": influence_dict,
+            "relative_error": relative_error_samples
+        }
+        root_mode = float(np.mean(az.hpd(root_samples, credible_interval=0.01)))
+        influence_modes = list(np.mean(az.hpd(influence_samples, credible_interval=0.01), axis=1))
+        influence_modes_dict = {varname: mode for mode, varname in
+                                zip(influence_modes, self.lasso_tracer.final_var_names)}
+        rel_error_mode = float(np.mean(az.hpd(relative_error_samples, credible_interval=0.01)))
+        self.coef_ = {
+            "root": root_mode,
+            "influences": influence_modes_dict,
+            "relative_error": rel_error_mode
+        }
+
+    def coef_ci(self, ci: float):
+        """
+        Returns confidence intervals with custom confidence for p
+        Parameters
+        ----------
+        ci : specifies confidence of the confidence interval to compute from sampled influence values
+
+        Returns dictionary containing a confidence interval for each influence
+        -------
+
+        """
+        coef_cis = {}
+        assert_ci(ci)
+        for key, val in self.coef_samples_.items():
+            if key == "influences":
+                inf_dict = {}
+                for feature_name, feature_samples in val.items():
+                    inf_dict[feature_name] = az.hpd(feature_samples, credible_interval=ci)
+                coef_cis[key] = inf_dict
+            else:
+                coef_cis[key] = az.hpd(val, credible_interval=ci)
+        return coef_cis
+
+    def predict(self, X, n_samples: int = None, ci: float = None):
+        """
+        Performs a prediction conforming to the sklearn interface.
+
+        Parameters
+        ----------
+        X : Array-like data
+        n_samples : number of posterior predictive samples to return for each prediction
+        ci : value between 0 and 1 representing the desired confidence of returned confidence intervals. E.g., ci= 0.8 will generate 80%-confidence intervals
+
+        Returns
+        -------
+         - a scalar if only x is specified
+         - a set of posterior predictive samples of size n_samples if is given and n_samples > 0
+         - a set of pairs, representing lower and upper bounds of confidence intervals for each prediction if ci is given
+
+        """
+        tracer = self.lasso_tracer
+        if not n_samples:
+            n_samples = 500
+            y_samples = tracer.predict_raw_keep_trace_samples(X, n_post_samples=n_samples)
+            y_pred = np.mean(az.hpd(y_samples, credible_interval=0.01), axis=1)
+        else:
+            y_samples = tracer.predict_raw_keep_trace_samples(X, n_post_samples=n_samples)
+            if ci:
+                assert_ci(ci)
+                y_pred = az.hpd(y_samples, credible_interval=ci)
+            else:
+                y_pred = y_samples
+        return y_pred
+
+
+def assert_ci(ci):
+    assert 0 < ci < 1, "Confidence should be given 0 < ci < 1"
