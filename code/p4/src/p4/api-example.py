@@ -39,6 +39,9 @@ def main():
 
     reg = P4Regressor("/tmp/p4/results-debugging")
     print("Start fitting")
+    # fit without feature names first
+    reg.fit(train_x, train_y)
+    # fit with feature names
     reg.fit(train_x, train_y, feature_names=feature_names)
     n_raw_samples = 1000
     y_samples = reg.predict(eval_test_x, n_raw_samples)

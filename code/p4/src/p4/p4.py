@@ -1398,7 +1398,7 @@ class P4Regressor(BaseEstimator, RegressorMixin):
 
     def fit(self, X, y, feature_names: list = None, pos_map: dict = None, mcmc_cores: int = 3, mcmc_samples: int = 1000,
             mcmc_tune: int = 500,
-            advi_its: int = 1000, method="mcmc"):
+            advi_its: int = 1000, method="mcmc", model_interactions=True):
         """
 
         Parameters
@@ -1413,6 +1413,7 @@ class P4Regressor(BaseEstimator, RegressorMixin):
         mcmc_tune : Number of tuning samples that are discarded before conducting mcmc_samples samples
         advi_its : Number of variational inference steps that approximate MCMC before MCMC starts
         method : "mcmc" if combining variational inference with MCMC (recommended)
+        model_interactions : Learns pairwise interactions between influential options, and only option-wise influences
         """
         if pos_map:
             feature_names = list(pos_map)
@@ -1420,11 +1421,12 @@ class P4Regressor(BaseEstimator, RegressorMixin):
             pos_map = {opt: idx for idx, opt in enumerate(feature_names)}
         else:
             pos_map = {opt: idx for idx, opt in zip(range(X.shape[1]), iter_all_strings())}
+            feature_names = list(pos_map)
 
         self.pos_map = pos_map
         self.lasso_tracer.fit(X, y, pos_map=pos_map, feature_names=feature_names, mcmc_cores=mcmc_cores,
                               mcmc_samples=mcmc_samples, mcmc_tune=mcmc_tune,
-                              advi_its=advi_its, method=method)
+                              advi_its=advi_its, method=method, model_interactions=model_interactions)
         self.update_coefs()
 
     def update_coefs(self):
