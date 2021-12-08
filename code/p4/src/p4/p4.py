@@ -1044,8 +1044,9 @@ class LassoTracer(Tracer):
         seed_lin = np.random.randint(0, 10 ** 5)
 
         start_ft_selection = time.time()
-        print("Starting feature and itneraction selection.")
+        print("Starting feature and interaction selection.")
         self.final_var_names, lars_pipe, pruned_x = self.get_influentials_from_lasso()
+        assert self.final_var_names, "Lasso feature selection selected no options of interactions. Hence, P4 cannot learn any influence!"
         self.cost_ft_selection = time.time() - start_ft_selection
         print("Feature selection with lasso took {}s".format(self.cost_ft_selection))
         stage_name_lasso = "it-lasso"
