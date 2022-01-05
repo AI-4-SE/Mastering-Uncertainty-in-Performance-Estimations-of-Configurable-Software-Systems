@@ -12,6 +12,7 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src"),
     python_requires=">=3.6",
     install_requires=[
+        'numpy>=1.18.3,<=1.19.0'
         'matplotlib>=3.2.1,<3.3.3',
         'pandas>=1.0.1,<1.0.5',
         'arviz>=0.7.0,<0.8.0',
