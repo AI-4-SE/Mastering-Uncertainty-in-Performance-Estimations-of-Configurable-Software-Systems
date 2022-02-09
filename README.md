@@ -16,6 +16,10 @@ As a result of a more detailed analysis uncertainty within the influences of opt
  - [term influence confidence interval widths for models trained on T<sub>2</sub> vs models trained on T<sub>3</sub>][term-cis]  
  - [prediction confidence interval widths for models trained on T<sub>2</sub> vs models trained on T<sub>3</sub>][prediction-cis]
 
+as well as
+ - [a detailed analysis of the time needed to fit models with our approach][fitting-times]
+
+
 [md-mape]: mape/README.md
 [md-subject-systems]: ./systems/README.md
 [md-calibration]: calibration/README.md
@@ -23,3 +27,4 @@ As a result of a more detailed analysis uncertainty within the influences of opt
 [md-data]: ./data/eval.csv
 [term-cis]: ./extension/term-cis/README.md
 [prediction-cis]: ./extension/prediction-cis/README.md
+[fitting-times]: ./fitting-times.md
