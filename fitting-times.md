@@ -2,7 +2,7 @@
 
 
 ## Fitting times
-The following numbers represent the median of model fitting times over 5 repetitions. 
+The following numbers represent the median of model fitting times over 5 repetitions in minutes. 
 ### Model Π<sub>ho</sub>
 
 
