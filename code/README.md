@@ -16,7 +16,7 @@ mkdir -p /tmp/p4
 
 To run P4, you need to access the docker container terminal by running
 ```
-docker run -it --mount type=bind,source=/tmp/p4,target=/results p4:p4-dev
+docker run -it --mount type=bind,source=/tmp/p4,target=/results p4:p4-dev bash
 ```
 
 
